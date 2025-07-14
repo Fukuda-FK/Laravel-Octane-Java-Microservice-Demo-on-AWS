@@ -1,138 +1,47 @@
 # Laravel Octane & Java Microservice Demo on AWS
 
-これは、PHPのアプリケーションサーバーであるLaravel Octane (Swoole)で構築されたECサイトが、バックエンドのJava (Spring Boot) 製マイクロサービスから情報を取得する構成のデモアプリケーションです。
+## 1. 概要
 
-インフラの構築はAWS CloudFormationで自動化され、各アプリケーションはDockerコンテナとしてEC2インスタンス上で動作します。
+このプロジェクトは、PHPのアプリケーションサーバー **Laravel Octane (Swoole)** で構築されたフロントエンドアプリケーションが、バックエンドの **Java (Spring Boot)** 製マイクロサービスからAPI経由で情報を取得する、モダンなWebアプリケーションのデモです。
 
+インフラは **AWS CloudFormation** によってコード管理され、各アプリケーションは **Docker** コンテナとしてEC2インスタンス上で動作します。この構成は、PHPのライフサイクルの違い（オブジェクトの再利用）や、複数言語サービス間の連携といった課題に対する実践的な解決策を提示します。
 
+## 2. システムアーキテクチャ
 
----
+本システムは、以下のコンポーネントで構成されます。
 
-## 🚀 アーキテクチャ
+[Image of a modern web application architecture diagram]
 
-- **ECサイトフロント (Laravel Octane on PHP)**
-  - ユーザーからのリクエストを受け付け、商品ページを表示します。
-  - 価格情報を取得するため、バックエンドのJava APIを呼び出します。
-- **価格情報API (Spring Boot on Java)**
-  - 商品の価格情報を提供するシンプルなREST APIです。
-- **インフラ (AWS)**
-  - 2台のEC2インスタンス (PHP用, Java用)
-  - インスタンス間の通信と外部からのHTTPアクセスを制御するセキュリティグループ
-  - 上記全てを **CloudFormation (`infrastructure.yaml`)** で一括管理します。
+-   **ECサイトフロント (PHP / Laravel Octane)**
+    -   ユーザーからのリクエストを受け付け、商品ページを表示します。
+    -   バックエンドの価格情報APIに対してHTTPリクエストを送信し、動的に価格データを取得します。
+    -   CPUアーキテクチャの互換性問題を解決するため、UbuntuベースのカスタムDockerfileでビルドされます。
 
----
+-   **価格情報API (Java / Spring Boot)**
+    -   商品IDに基づき、価格情報をJSON形式で返すシンプルなRESTful APIです。
+    -   マイクロサービスとしてフロントエンドから独立しており、個別のデプロイが可能です。
 
-## 🛠 必要要件
+-   **インフラストラクチャ (AWS)**
+    -   **VPC / Subnet**: 指定された既存のVPC・サブネット内にリソースを構築します。
+    -   **EC2**: 2台のAmazon Linux 2023インスタンス。それぞれPHP用、Java用として稼働します。
+    -   **Security Group**: 既存のセキュリティグループを使用し、外部からのHTTP(80)アクセスと、インスタンス間のAPI通信(8080)を許可します。
+    -   **CloudFormation**: 上記のAWSリソースは、`infrastructure.yaml`によって一元的に管理・デプロイされます。
 
-- [Git](https://git-scm.com/)
-- [AWS CLI](https://aws.amazon.com/cli/) (設定済みであること)
-- [Docker](https://www.docker.com/) (ローカルでのテスト用)
-- AWSアカウントと、EC2キーペア
+## 3. 技術スタック
 
----
+-   **バックエンド (フロントエンド側)**: PHP 8.3, Laravel 10, Octane (Swoole)
+-   **バックエンド (API側)**: Java 17, Spring Boot 3
+-   **コンテナ技術**: Docker
+-   **クラウドプラットフォーム**: AWS (EC2)
+-   **インフラ管理**: AWS CloudFormation
+-   **ベースOS (コンテナ)**: Ubuntu 22.04
 
-## ⚙️ セットアップ & デプロイ手順
+## 4. デプロイ・ワークフロー
 
-### ステップ1: リポジトリのクローン
-
-まず、このリポジトリをローカル環境にクローンします。
-
-```bash
-git clone [https://github.com/your-username/demo-project.git](https://github.com/your-username/demo-project.git)
-cd demo-project
-```
-
-### ステップ2: CloudFormationによるインフラ構築
-
-AWS CLIを使い、EC2インスタンスとセキュリティグループを作成します。
-
-1.  **コマンドの実行**
-    `infrastructure.yaml` ファイルがあるディレクトリで、以下のコマンドを実行します。`YourKeyPairName` はご自身がAWSに登録済みのEC2キーペア名に置き換えてください。
-
-    ```bash
-    aws cloudformation create-stack \
-      --stack-name demo-app-stack \
-      --template-body file://infrastructure.yaml \
-      --parameters ParameterKey=KeyPairName,ParameterValue=YourKeyPairName
-    ```
-
-2.  **出力の確認**
-    スタックの作成が完了するまで数分待った後、以下のコマンドでEC2インスタンスのIPアドレスを取得します。このIPアドレスは後のステップで使います。
-
-    ```bash
-    aws cloudformation describe-stacks --stack-name demo-app-stack --query "Stacks[0].Outputs"
-    ```
-
-### ステップ3: Java価格情報APIのデプロイ
-
-1.  **SSH接続**
-    CloudFormationの出力から `JavaApiPublicIp` を確認し、SSHで接続します。
-
-    ```bash
-    ssh -i /path/to/your-key.pem ec2-user@<JavaApiPublicIp>
-    ```
-
-2.  **アプリケーションの起動**
-    接続後、リポジトリをクローンし、Dockerコンテナをビルド・実行します。
-
-    ```bash
-    git clone [https://github.com/your-username/demo-project.git](https://github.com/your-username/demo-project.git)
-    cd demo-project/java-price-api
-
-    # Dockerイメージをビルド
-    docker build -t price-api .
-
-    # Dockerコンテナを実行
-    docker run -d -p 8080:8080 --name java-api-container price-api
-    ```
-
-### ステップ4: Laravel ECサイトのデプロイ
-
-1.  **SSH接続**
-    CloudFormationの出力から `PhpEcSitePublicIp` を確認し、SSHで接続します。
-
-    ```bash
-    ssh -i /path/to/your-key.pem ec2-user@<PhpEcSitePublicIp>
-    ```
-
-2.  **アプリケーションの起動**
-    接続後、同様にリポジトリをクローンし、コンテナを起動します。このとき、`.env` ファイルにJava APIサーバーの **プライベートIP** を設定します。
-
-    ```bash
-    git clone [https://github.com/your-username/demo-project.git](https://github.com/your-username/demo-project.git)
-    cd demo-project/laravel-ec-site
-
-    # .envファイルを作成
-    cp .env.example .env
-
-    # .envファイルにJava APIのプライベートIPを追記
-    # <JavaApiPrivateIp> はCloudFormationの出力で確認した値に置き換える
-    echo "JAVA_API_HOST=<JavaApiPrivateIp>" >> .env
-
-    # Dockerイメージをビルド
-    docker build -t ec-site-app .
-
-    # Dockerコンテナを実行
-    docker run -d -p 80:8000 --env-file .env --name ec-site-container ec-site-app
-    ```
-
----
-
-## ✅ 動作確認
-
-ブラウザを開き、以下のURLにアクセスします。
-`PhpEcSitePublicIp` はCloudFormationの出力で確認したPHPサーバーのパブリックIPに置き換えてください。
-
-`http://<PhpEcSitePublicIp>/products/123`
-
-「価格: 1,980 円 (データ取得元: Java API)」と表示されれば成功です。
-
----
-
-## 🧹 クリーンアップ
-
-デモの確認が終わったら、不要な課金を避けるためにCloudFormationスタックを削除してください。これにより、作成されたEC2インスタンスとセキュリティグループが全て削除されます。
-
-```bash
-aws cloudformation delete-stack --stack-name demo-app-stack
-```
+1.  **コード管理**: アプリケーションの全ソースコード（Dockerfile含む）は、単一のGitリポジトリ（GitHub）で管理します。
+2.  **インフラ構築**: `infrastructure.yaml` を利用し、`aws cloudformation create-stack` コマンドでAWS上にインフラを一括構築します。
+3.  **アプリケーションのデプロイ**:
+    -   各EC2インスタンスにSSHで接続します。
+    -   GitHubからソースコードを `git clone` します。
+    -   各アプリケーションのディレクトリに移動し、`docker build` でコンテナイメージをビルドします。
+    -   `docker run` でコンテナを起動します。Laravel側では、`.env`ファイルにJavaサーバーのプライベートIPを設定します。

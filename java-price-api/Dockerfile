@@ -1,12 +1,18 @@
-# ビルドステージ
-FROM openjdk:17-jdk-slim as build
-WORKDIR /workspace
-COPY . .
-RUN ./mvnw package -DskipTests
+# ステージ1: ビルド環境としてMavenが含まれる公式イメージを使用
+FROM maven:3.9-eclipse-temurin-17-focal AS build
 
-# 実行ステージ
-FROM openjdk:17-jre-slim
 WORKDIR /app
-COPY --from=build /workspace/target/*.jar app.jar
+COPY pom.xml .
+RUN mvn dependency:go-offline
+COPY src ./src
+RUN mvn package -DskipTests
+
+# ステージ2: 実行環境として軽量なJREイメージを使用
+FROM eclipse-temurin:17-jre-focal
+WORKDIR /app
+
+# ビルドステージから生成されたjarファイルのみをコピー
+COPY --from=build /app/target/*.jar app.jar
+
 EXPOSE 8080
 ENTRYPOINT ["java", "-jar", "app.jar"]

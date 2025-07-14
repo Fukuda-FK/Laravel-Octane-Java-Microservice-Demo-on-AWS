@@ -1,0 +1,71 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: Create two EC2 instances in a specific VPC/Subnet for PHP/Java demo application.
+
+Parameters:
+  KeyPairName:
+    Description: Name of an existing EC2 KeyPair to enable SSH access.
+    Type: AWS::EC2::KeyPair::KeyName
+    Default: test-newrelic
+  InstanceType:
+    Description: EC2 instance type for both servers.
+    Type: String
+    Default: t2.micro
+    AllowedValues:
+      - t2.micro
+      - t3.micro
+
+Resources:
+  # Java APIサーバー用EC2インスタンス
+  JavaApiInstance:
+    Type: AWS::EC2::Instance
+    Properties:
+      InstanceType: !Ref InstanceType
+      KeyName: !Ref KeyPairName
+      # 修正点: 東京リージョンの最新のAmazon Linux 2 AMI IDに更新
+      ImageId: "ami-07695fdb89e41b9f8" 
+      SecurityGroupIds:
+        - "sg-02900c8401da071af"
+      SubnetId: "subnet-0fcc51a1a1460d2c0"
+      Tags:
+        - Key: Name
+          Value: java-price-api
+      UserData:
+        Fn::Base64: |
+          #!/bin/bash -xe
+          yum update -y
+          amazon-linux-extras install docker -y
+          service docker start
+          usermod -a -G docker ec2-user
+
+  # PHP ECサイト用EC2インスタンス
+  PhpEcSiteInstance:
+    Type: AWS::EC2::Instance
+    Properties:
+      InstanceType: !Ref InstanceType
+      KeyName: !Ref KeyPairName
+      # 修正点: 東京リージョンの最新のAmazon Linux 2 AMI IDに更新
+      ImageId: "ami-07695fdb89e41b9f8"
+      SecurityGroupIds:
+        - "sg-02900c8401da071af"
+      SubnetId: "subnet-0fcc51a1a1460d2c0"
+      Tags:
+        - Key: Name
+          Value: php-ec-site
+      UserData:
+        Fn::Base64: |
+          #!/bin/bash -xe
+          yum update -y
+          amazon-linux-extras install docker -y
+          service docker start
+          usermod -a -G docker ec2-user
+
+Outputs:
+  PhpEcSitePublicIp:
+    Description: Public IP address of the PHP EC Site instance
+    Value: !GetAtt PhpEcSiteInstance.PublicIp
+  JavaApiPublicIp:
+    Description: Public IP address of the Java API instance
+    Value: !GetAtt JavaApiInstance.PublicIp
+  JavaApiPrivateIp:
+    Description: Private IP address of the Java API instance
+    Value: !GetAtt JavaApiInstance.PrivateIp
