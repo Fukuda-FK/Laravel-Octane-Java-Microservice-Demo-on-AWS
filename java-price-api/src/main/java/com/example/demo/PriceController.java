@@ -11,11 +11,15 @@ public class PriceController {
 
     @GetMapping("/price/{productId}")
     public Map<String, Object> getPrice(@PathVariable String productId) {
-        // 本来はデータベースなどから価格を取得します
         Map<String, Object> response = new HashMap<>();
         response.put("productId", productId);
-        response.put("price", 1980); // 固定で1980円を返す
+        response.put("price", 1980);
         response.put("source", "Java API");
+        
+        // 環境変数 'SERVER_HOSTNAME' からホスト名を取得します
+        String serverHostname = System.getenv("SERVER_HOSTNAME");
+        response.put("server_hostname", serverHostname != null ? serverHostname : "N/A");
+        
         return response;
     }
 }

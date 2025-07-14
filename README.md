@@ -1,47 +1,46 @@
-# Laravel Octane & Java Microservice Demo on AWS
+# Laravel + Java マイクロサービス on AWS (EC2)
 
 ## 1. 概要
 
-このプロジェクトは、PHPのアプリケーションサーバー **Laravel Octane (Swoole)** で構築されたフロントエンドアプリケーションが、バックエンドの **Java (Spring Boot)** 製マイクロサービスからAPI経由で情報を取得する、モダンなWebアプリケーションのデモです。
+このプロジェクトは、PHPのアプリケーションサーバー **Laravel Octane (Swoole)** で構築されたフロントエンドと、バックエンドの **Java (Spring Boot)** 製マイクロサービスが連携するWebアプリケーションのデモです。
 
-インフラは **AWS CloudFormation** によってコード管理され、各アプリケーションは **Docker** コンテナとしてEC2インスタンス上で動作します。この構成は、PHPのライフサイクルの違い（オブジェクトの再利用）や、複数言語サービス間の連携といった課題に対する実践的な解決策を提示します。
+インフラは **AWS CloudFormation** によってコード管理され、各アプリケーション（負荷生成ツール含む）は **Docker** コンテナとしてEC2インスタンス上で動作します。一連のトラブルシューティングを経て、CPUアーキテクチャの互換性問題や、フレームワークのバージョン不整合、デプロイ手順などを解決した、安定的で再現性の高い構成となっています。
 
 ## 2. システムアーキテクチャ
 
-本システムは、以下のコンポーネントで構成されます。
+本システムは、以下の3つの主要コンポーネントで構成されます。
 
-[Image of a modern web application architecture diagram]
+-   **ECサイトフロント (Laravel / PHP)**
+    -   ユーザーからのリクエストを受け付け、商品ページや価格取得フォームを表示します。
+    -   バックエンドの価格情報APIに対してHTTPリクエストを送信し、動的にデータを取得します。
+    -   CPUアーキテクチャ互換のため、UbuntuベースのカスタムDockerfileでビルドされます。
 
--   **ECサイトフロント (PHP / Laravel Octane)**
-    -   ユーザーからのリクエストを受け付け、商品ページを表示します。
-    -   バックエンドの価格情報APIに対してHTTPリクエストを送信し、動的に価格データを取得します。
-    -   CPUアーキテクチャの互換性問題を解決するため、UbuntuベースのカスタムDockerfileでビルドされます。
+-   **価格情報API (Spring Boot / Java)**
+    -   商品IDに基づき、価格情報と自身のサーバーホスト名をJSON形式で返すRESTful APIです。
+    -   フロントエンドから独立したマイクロサービスとして稼働します。
 
--   **価格情報API (Java / Spring Boot)**
-    -   商品IDに基づき、価格情報をJSON形式で返すシンプルなRESTful APIです。
-    -   マイクロサービスとしてフロントエンドから独立しており、個別のデプロイが可能です。
+-   **負荷生成アプリ (Python)**
+    -   テスト環境として、上記2つのアプリケーションに定期的にHTTPリクエストを送信し、トランザクションを発生させます。
 
 -   **インフラストラクチャ (AWS)**
-    -   **VPC / Subnet**: 指定された既存のVPC・サブネット内にリソースを構築します。
-    -   **EC2**: 2台のAmazon Linux 2023インスタンス。それぞれPHP用、Java用として稼働します。
-    -   **Security Group**: 既存のセキュリティグループを使用し、外部からのHTTP(80)アクセスと、インスタンス間のAPI通信(8080)を許可します。
-    -   **CloudFormation**: 上記のAWSリソースは、`infrastructure.yaml`によって一元的に管理・デプロイされます。
+    -   **EC2**: 3台のAmazon Linux 2023インスタンス。それぞれPHP用、Java用、負荷生成用に割り当てられます。
+    -   **CloudFormation**: 上記EC2インスタンスは、`infrastructure.yaml`によって一元的に管理・デプロイされます。
 
 ## 3. 技術スタック
 
--   **バックエンド (フロントエンド側)**: PHP 8.3, Laravel 10, Octane (Swoole)
--   **バックエンド (API側)**: Java 17, Spring Boot 3
+-   **フロントエンド側**: PHP 8.3, Laravel 10, Octane (Swoole)
+-   **API側**: Java 17, Spring Boot 3
+-   **負荷生成**: Python 3.9
 -   **コンテナ技術**: Docker
--   **クラウドプラットフォーム**: AWS (EC2)
+-   **クラウド**: AWS (EC2)
 -   **インフラ管理**: AWS CloudFormation
--   **ベースOS (コンテナ)**: Ubuntu 22.04
 
 ## 4. デプロイ・ワークフロー
 
-1.  **コード管理**: アプリケーションの全ソースコード（Dockerfile含む）は、単一のGitリポジトリ（GitHub）で管理します。
-2.  **インフラ構築**: `infrastructure.yaml` を利用し、`aws cloudformation create-stack` コマンドでAWS上にインフラを一括構築します。
+1.  **コード管理**: アプリケーションの全ソースコード（Dockerfile含む）は、単一のGitリポジトリで管理します。
+2.  **インフラ構築**: (初回のみ) `infrastructure.yaml` を利用し、`aws cloudformation create-stack` コマンドでAWS上にEC2インスタンス群を一括構築します。
 3.  **アプリケーションのデプロイ**:
     -   各EC2インスタンスにSSHで接続します。
     -   GitHubからソースコードを `git clone` します。
     -   各アプリケーションのディレクトリに移動し、`docker build` でコンテナイメージをビルドします。
-    -   `docker run` でコンテナを起動します。Laravel側では、`.env`ファイルにJavaサーバーのプライベートIPを設定します。
+    -   `docker run` でコンテナを起動します。この際、Laravel側にはJavaサーバーのプライベートIPを、負荷生成アプリにはLaravelとJavaサーバーのプライベートIPを、それぞれ環境変数で渡します。
